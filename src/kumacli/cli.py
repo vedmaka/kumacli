@@ -114,9 +114,44 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     monitors_sub = monitors_parser.add_subparsers(dest="monitors_command", required=True)
     monitors_list = monitors_sub.add_parser("list", help="List monitors and statuses")
     monitors_list.add_argument("--json", action="store_true", help="Output JSON")
+    monitors_get = monitors_sub.add_parser("get", help="Get monitor details")
+    monitors_get.add_argument("--id", required=True, type=int, help="Monitor ID")
+    monitors_get.add_argument("--json", action="store_true", help="Output JSON")
+
+    monitors_add = monitors_sub.add_parser("add", help="Create monitor")
+    _add_monitor_payload_args(monitors_add)
+    monitors_add.add_argument("--name", help="Monitor name")
+    monitors_add.add_argument("--type", help="Monitor type, e.g. http|port|ping")
+    monitors_add.add_argument("--json", action="store_true", help="Output JSON")
+
+    monitors_update = monitors_sub.add_parser("update", help="Update monitor")
+    monitors_update.add_argument("--id", required=True, type=int, help="Monitor ID")
+    _add_monitor_payload_args(monitors_update)
+    monitors_update.add_argument("--name", help="Monitor name")
+    monitors_update.add_argument("--type", help="Monitor type, e.g. http|port|ping")
+    monitors_update.add_argument("--json", action="store_true", help="Output JSON")
+
+    monitors_delete = monitors_sub.add_parser("delete", help="Delete monitor")
+    monitors_delete.add_argument("--id", required=True, type=int, help="Monitor ID")
+    monitors_delete.add_argument("--json", action="store_true", help="Output JSON")
+
+    monitors_pause = monitors_sub.add_parser("pause", help="Pause monitor")
+    monitors_pause.add_argument("--id", required=True, type=int, help="Monitor ID")
+    monitors_pause.add_argument("--json", action="store_true", help="Output JSON")
+
+    monitors_resume = monitors_sub.add_parser("resume", help="Resume monitor")
+    monitors_resume.add_argument("--id", required=True, type=int, help="Monitor ID")
+    monitors_resume.add_argument("--json", action="store_true", help="Output JSON")
 
     maintenance_parser = subparsers.add_parser("maintenance", help="Maintenance operations")
     maintenance_sub = maintenance_parser.add_subparsers(dest="maintenance_command", required=True)
+
+    maintenance_list = maintenance_sub.add_parser("list", help="List maintenances")
+    maintenance_list.add_argument("--json", action="store_true", help="Output JSON")
+
+    maintenance_get = maintenance_sub.add_parser("get", help="Get maintenance details")
+    maintenance_get.add_argument("--id", required=True, type=int, help="Maintenance ID")
+    maintenance_get.add_argument("--json", action="store_true", help="Output JSON")
 
     create_parser = maintenance_sub.add_parser("create", help="Create maintenance and attach monitors")
     create_parser.add_argument("--title", required=True, help="Maintenance title")
@@ -143,6 +178,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     delete_parser = maintenance_sub.add_parser("delete", help="Delete maintenance")
     delete_parser.add_argument("--id", required=True, type=int, help="Maintenance ID")
     delete_parser.add_argument("--json", action="store_true", help="Output JSON")
+
+    pause_parser = maintenance_sub.add_parser("pause", help="Pause maintenance")
+    pause_parser.add_argument("--id", required=True, type=int, help="Maintenance ID")
+    pause_parser.add_argument("--json", action="store_true", help="Output JSON")
+
+    resume_parser = maintenance_sub.add_parser("resume", help="Resume maintenance")
+    resume_parser.add_argument("--id", required=True, type=int, help="Maintenance ID")
+    resume_parser.add_argument("--json", action="store_true", help="Output JSON")
 
     args = parser.parse_args(argv)
 
@@ -205,6 +248,17 @@ def _add_monitor_id_arg(parser: argparse.ArgumentParser, *, required: bool) -> N
         required=required,
         help="Monitor ID. Repeatable, comma-separated accepted",
     )
+
+
+def _add_monitor_payload_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--field",
+        action="append",
+        default=[],
+        help="Monitor payload field as key=value. Repeatable.",
+    )
+    parser.add_argument("--data-json", help="Monitor payload JSON object")
+    parser.add_argument("--data-file", help="Path to JSON file with monitor payload object")
 
 
 def _parse_strategy(value: str) -> MaintenanceStrategy:
@@ -279,6 +333,54 @@ def _parse_monitor_ids(values: list[str]) -> list[int]:
             seen.add(monitor_id)
             ids.append(monitor_id)
     return ids
+
+
+def _parse_json_object(raw: str, *, source: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise CliError(f"Invalid JSON in {source}: {exc.msg}") from exc
+    if not isinstance(parsed, dict):
+        raise CliError(f"{source} must be a JSON object")
+    return parsed
+
+
+def _parse_field_value(raw: str) -> Any:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+
+
+def _parse_key_value_fields(values: list[str]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for item in values:
+        if "=" not in item:
+            raise CliError(f"Invalid --field '{item}'. Expected key=value")
+        key, raw_value = item.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise CliError(f"Invalid --field '{item}'. Key is empty")
+        payload[key] = _parse_field_value(raw_value.strip())
+    return payload
+
+
+def _build_monitor_payload(args: argparse.Namespace) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if args.data_file:
+        path = Path(args.data_file)
+        if not path.is_file():
+            raise CliError(f"Monitor payload file not found: {args.data_file}")
+        payload.update(_parse_json_object(path.read_text(encoding="utf-8"), source="--data-file"))
+    if args.data_json:
+        payload.update(_parse_json_object(args.data_json, source="--data-json"))
+    if args.field:
+        payload.update(_parse_key_value_fields(args.field))
+    if getattr(args, "name", None) is not None:
+        payload["name"] = args.name
+    if getattr(args, "type", None) is not None:
+        payload["type"] = args.type
+    return payload
 
 
 def _build_payload(args: argparse.Namespace) -> dict[str, Any]:
@@ -360,6 +462,29 @@ def _print_monitors(monitors: list[dict[str, Any]], *, as_json: bool) -> None:
         print(f"{item['id']}\t{item['name']}\t{item['status']}\t{item['active']}\t{item['type']}")
 
 
+def _print_payload(payload: Any, *, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(payload, indent=2))
+        return
+    if isinstance(payload, dict):
+        for key in sorted(payload):
+            print(f"{key}: {payload[key]}")
+        return
+    print(payload)
+
+
+def _print_maintenances(maintenances: list[dict[str, Any]], *, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(maintenances, indent=2))
+        return
+    print("id\ttitle\tstatus\tstrategy")
+    for item in maintenances:
+        print(
+            f"{item.get('id', '')}\t{item.get('title', '')}\t"
+            f"{item.get('status', '')}\t{item.get('strategy', '')}"
+        )
+
+
 def _validate_monitor_ids(api: UptimeKumaApi, monitor_ids: list[int]) -> None:
     available = {int(m["id"]) for m in api.get_monitors()}
     missing = [str(mid) for mid in monitor_ids if mid not in available]
@@ -382,6 +507,70 @@ def _run_monitors_list(api: UptimeKumaApi, args: argparse.Namespace) -> None:
             }
         )
     _print_monitors(rows, as_json=args.json)
+
+
+def _run_monitors_get(api: UptimeKumaApi, args: argparse.Namespace) -> None:
+    monitor = api.get_monitor(args.id)
+    _print_payload(monitor, as_json=args.json)
+
+
+def _run_monitors_add(api: UptimeKumaApi, args: argparse.Namespace) -> None:
+    payload = _build_monitor_payload(args)
+    if not payload:
+        raise CliError("Monitor payload is empty")
+    if not payload.get("name"):
+        raise CliError("Missing monitor name (--name or payload field name)")
+    if not payload.get("type"):
+        raise CliError("Missing monitor type (--type or payload field type)")
+
+    result = api.add_monitor(**payload)
+    monitor_id = result.get("monitorID") or result.get("monitorId")
+    if not isinstance(monitor_id, int):
+        raise CliError("Uptime Kuma response missing monitor ID")
+    output = {"monitor_id": monitor_id, "message": result.get("msg", "ok")}
+    if args.json:
+        print(json.dumps(output, indent=2))
+    else:
+        print(f"Created monitor {monitor_id}")
+
+
+def _run_monitors_update(api: UptimeKumaApi, args: argparse.Namespace) -> None:
+    payload = _build_monitor_payload(args)
+    if not payload:
+        raise CliError("Nothing to update")
+    result = api.edit_monitor(args.id, **payload)
+    output = {"monitor_id": args.id, "message": result.get("msg", "updated"), "updated_fields": sorted(payload)}
+    if args.json:
+        print(json.dumps(output, indent=2))
+    else:
+        print(f"Updated monitor {args.id}")
+
+
+def _run_monitors_delete(api: UptimeKumaApi, args: argparse.Namespace) -> None:
+    result = api.delete_monitor(args.id)
+    output = {"monitor_id": args.id, "message": result.get("msg", "deleted")}
+    if args.json:
+        print(json.dumps(output, indent=2))
+    else:
+        print(f"Deleted monitor {args.id}")
+
+
+def _run_monitors_pause(api: UptimeKumaApi, args: argparse.Namespace) -> None:
+    result = api.pause_monitor(args.id)
+    output = {"monitor_id": args.id, "message": result.get("msg", "paused")}
+    if args.json:
+        print(json.dumps(output, indent=2))
+    else:
+        print(f"Paused monitor {args.id}")
+
+
+def _run_monitors_resume(api: UptimeKumaApi, args: argparse.Namespace) -> None:
+    result = api.resume_monitor(args.id)
+    output = {"monitor_id": args.id, "message": result.get("msg", "resumed")}
+    if args.json:
+        print(json.dumps(output, indent=2))
+    else:
+        print(f"Resumed monitor {args.id}")
 
 
 def _run_maintenance_create(api: UptimeKumaApi, args: argparse.Namespace) -> None:
@@ -434,9 +623,61 @@ def _run_maintenance_delete(api: UptimeKumaApi, args: argparse.Namespace) -> Non
         print(f"Deleted maintenance {args.id}")
 
 
+def _run_maintenance_list(api: UptimeKumaApi, args: argparse.Namespace) -> None:
+    rows = sorted(api.get_maintenances(), key=lambda x: int(x.get("id", 0)))
+    _print_maintenances(rows, as_json=args.json)
+
+
+def _run_maintenance_get(api: UptimeKumaApi, args: argparse.Namespace) -> None:
+    maintenance = api.get_maintenance(args.id)
+    _print_payload(maintenance, as_json=args.json)
+
+
+def _run_maintenance_pause(api: UptimeKumaApi, args: argparse.Namespace) -> None:
+    result = api.pause_maintenance(args.id)
+    output = {"maintenance_id": args.id, "message": result.get("msg", "paused")}
+    if args.json:
+        print(json.dumps(output, indent=2))
+    else:
+        print(f"Paused maintenance {args.id}")
+
+
+def _run_maintenance_resume(api: UptimeKumaApi, args: argparse.Namespace) -> None:
+    result = api.resume_maintenance(args.id)
+    output = {"maintenance_id": args.id, "message": result.get("msg", "resumed")}
+    if args.json:
+        print(json.dumps(output, indent=2))
+    else:
+        print(f"Resumed maintenance {args.id}")
+
+
 def _run(api: UptimeKumaApi, args: argparse.Namespace) -> None:
     if args.command == "monitors" and args.monitors_command == "list":
         _run_monitors_list(api, args)
+        return
+    if args.command == "monitors" and args.monitors_command == "get":
+        _run_monitors_get(api, args)
+        return
+    if args.command == "monitors" and args.monitors_command == "add":
+        _run_monitors_add(api, args)
+        return
+    if args.command == "monitors" and args.monitors_command == "update":
+        _run_monitors_update(api, args)
+        return
+    if args.command == "monitors" and args.monitors_command == "delete":
+        _run_monitors_delete(api, args)
+        return
+    if args.command == "monitors" and args.monitors_command == "pause":
+        _run_monitors_pause(api, args)
+        return
+    if args.command == "monitors" and args.monitors_command == "resume":
+        _run_monitors_resume(api, args)
+        return
+    if args.command == "maintenance" and args.maintenance_command == "list":
+        _run_maintenance_list(api, args)
+        return
+    if args.command == "maintenance" and args.maintenance_command == "get":
+        _run_maintenance_get(api, args)
         return
     if args.command == "maintenance" and args.maintenance_command == "create":
         _run_maintenance_create(api, args)
@@ -446,6 +687,12 @@ def _run(api: UptimeKumaApi, args: argparse.Namespace) -> None:
         return
     if args.command == "maintenance" and args.maintenance_command == "delete":
         _run_maintenance_delete(api, args)
+        return
+    if args.command == "maintenance" and args.maintenance_command == "pause":
+        _run_maintenance_pause(api, args)
+        return
+    if args.command == "maintenance" and args.maintenance_command == "resume":
+        _run_maintenance_resume(api, args)
         return
     raise CliError("Unknown command")
 

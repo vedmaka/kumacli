@@ -18,6 +18,14 @@ class FakeApi:
         self.updated_payload = None
         self.updated_id = None
         self.deleted_id = None
+        self.monitor_created_payload = None
+        self.monitor_updated_payload = None
+        self.monitor_updated_id = None
+        self.monitor_deleted_id = None
+        self.monitor_paused_id = None
+        self.monitor_resumed_id = None
+        self.maintenance_paused_id = None
+        self.maintenance_resumed_id = None
         self.monitor_links = []
         FakeApi.instances.append(self)
 
@@ -39,6 +47,30 @@ class FakeApi:
             return MonitorStatus.UP
         return MonitorStatus.DOWN
 
+    def get_monitor(self, monitor_id: int):
+        return {"id": monitor_id, "name": "api", "type": "http", "active": 1}
+
+    def add_monitor(self, **kwargs):
+        self.monitor_created_payload = kwargs
+        return {"monitorID": 55, "msg": "Added Successfully."}
+
+    def edit_monitor(self, monitor_id: int, **kwargs):
+        self.monitor_updated_id = monitor_id
+        self.monitor_updated_payload = kwargs
+        return {"msg": "Saved."}
+
+    def delete_monitor(self, monitor_id: int):
+        self.monitor_deleted_id = monitor_id
+        return {"msg": "Deleted Successfully."}
+
+    def pause_monitor(self, monitor_id: int):
+        self.monitor_paused_id = monitor_id
+        return {"msg": "Paused Successfully."}
+
+    def resume_monitor(self, monitor_id: int):
+        self.monitor_resumed_id = monitor_id
+        return {"msg": "Resumed Successfully."}
+
     def add_maintenance(self, **kwargs):
         self.created_payload = kwargs
         return {"maintenanceID": 42, "msg": "Added Successfully."}
@@ -51,6 +83,23 @@ class FakeApi:
     def delete_maintenance(self, id_: int):
         self.deleted_id = id_
         return {"msg": "Deleted Successfully."}
+
+    def get_maintenances(self):
+        return [
+            {"id": 5, "title": "deploy", "status": "under-maintenance", "strategy": "manual"},
+            {"id": 9, "title": "database", "status": "active", "strategy": "single"},
+        ]
+
+    def get_maintenance(self, id_: int):
+        return {"id": id_, "title": "deploy", "status": "active", "strategy": "manual"}
+
+    def pause_maintenance(self, id_: int):
+        self.maintenance_paused_id = id_
+        return {"msg": "Paused Successfully."}
+
+    def resume_maintenance(self, id_: int):
+        self.maintenance_resumed_id = id_
+        return {"msg": "Resumed Successfully."}
 
     def add_monitor_maintenance(self, id_: int, monitors: list[dict]):
         self.monitor_links.append({"maintenance_id": id_, "monitors": monitors})
@@ -186,6 +235,119 @@ def test_monitors_list_json(monkeypatch, capsys):
     assert FakeApi.instances[0].disconnected is True
 
 
+def test_monitors_get_json(monkeypatch, capsys):
+    code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "monitors", "get", "--id", "2", "--json"],
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert '"id": 2' in out
+    assert '"name": "api"' in out
+
+
+def test_monitors_add_with_fields(monkeypatch):
+    code = _run(
+        monkeypatch,
+        [
+            "--url",
+            "http://kuma",
+            "--username",
+            "admin",
+            "--password",
+            "secret",
+            "monitors",
+            "add",
+            "--name",
+            "new-http",
+            "--type",
+            "http",
+            "--field",
+            "url=https://example.com",
+            "--field",
+            "interval=60",
+        ],
+    )
+    assert code == 0
+    api = FakeApi.instances[0]
+    assert api.monitor_created_payload["name"] == "new-http"
+    assert api.monitor_created_payload["type"] == "http"
+    assert api.monitor_created_payload["url"] == "https://example.com"
+    assert api.monitor_created_payload["interval"] == 60
+
+
+def test_monitors_update(monkeypatch):
+    code = _run(
+        monkeypatch,
+        [
+            "--url",
+            "http://kuma",
+            "--username",
+            "admin",
+            "--password",
+            "secret",
+            "monitors",
+            "update",
+            "--id",
+            "2",
+            "--name",
+            "db-updated",
+            "--field",
+            "maxretries=5",
+        ],
+    )
+    assert code == 0
+    api = FakeApi.instances[0]
+    assert api.monitor_updated_id == 2
+    assert api.monitor_updated_payload["name"] == "db-updated"
+    assert api.monitor_updated_payload["maxretries"] == 5
+
+
+def test_monitors_delete(monkeypatch):
+    code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "monitors", "delete", "--id", "2"],
+    )
+    assert code == 0
+    assert FakeApi.instances[0].monitor_deleted_id == 2
+
+
+def test_monitors_pause_resume(monkeypatch):
+    pause_code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "monitors", "pause", "--id", "2"],
+    )
+    assert pause_code == 0
+    assert FakeApi.instances[0].monitor_paused_id == 2
+
+    resume_code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "monitors", "resume", "--id", "2"],
+    )
+    assert resume_code == 0
+    assert FakeApi.instances[0].monitor_resumed_id == 2
+
+
+def test_monitors_add_requires_name_type(monkeypatch, capsys):
+    code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "monitors", "add", "--field", "url=x"],
+    )
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "Missing monitor name" in err
+
+
+def test_monitors_update_requires_payload(monkeypatch, capsys):
+    code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "monitors", "update", "--id", "1"],
+    )
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "Nothing to update" in err
+
+
 def test_maintenance_create(monkeypatch):
     code = _run(
         monkeypatch,
@@ -245,6 +407,44 @@ def test_maintenance_delete(monkeypatch):
     )
     assert code == 0
     assert FakeApi.instances[0].deleted_id == 5
+
+
+def test_maintenance_list_json(monkeypatch, capsys):
+    code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "maintenance", "list", "--json"],
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert '"id": 5' in out
+    assert '"title": "deploy"' in out
+
+
+def test_maintenance_get_json(monkeypatch, capsys):
+    code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "maintenance", "get", "--id", "5", "--json"],
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert '"id": 5' in out
+    assert '"strategy": "manual"' in out
+
+
+def test_maintenance_pause_resume(monkeypatch):
+    pause_code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "maintenance", "pause", "--id", "5"],
+    )
+    assert pause_code == 0
+    assert FakeApi.instances[0].maintenance_paused_id == 5
+
+    resume_code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "maintenance", "resume", "--id", "5"],
+    )
+    assert resume_code == 0
+    assert FakeApi.instances[0].maintenance_resumed_id == 5
 
 
 def test_login_with_username_password(monkeypatch):

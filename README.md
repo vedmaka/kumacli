@@ -4,9 +4,13 @@ CLI for Uptime Kuma.
 
 Features:
 - list monitors with current status
+- get monitor details
+- add/update/delete monitors
+- pause/resume monitors
 - create maintenance for selected monitors
 - update maintenance fields and linked monitors
 - delete maintenance
+- list/get/pause/resume maintenance
 
 ## Install
 
@@ -29,6 +33,39 @@ List monitors:
 
 ```bash
 uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors list
+```
+
+Get monitor:
+
+```bash
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors get --id 1 --json
+```
+
+Add monitor:
+
+```bash
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors add \
+  --name "Main API" \
+  --type http \
+  --field "url=https://example.com/health" \
+  --field "interval=60"
+```
+
+Update monitor:
+
+```bash
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors update \
+  --id 1 \
+  --name "Main API v2" \
+  --field "maxretries=5"
+```
+
+Delete/pause/resume monitor:
+
+```bash
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors pause --id 1
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors resume --id 1
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors delete --id 1
 ```
 
 Create maintenance for monitors:
@@ -55,4 +92,13 @@ Delete maintenance:
 
 ```bash
 uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance delete --id 5
+```
+
+List/get/pause/resume maintenance:
+
+```bash
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance list --json
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance get --id 5 --json
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance pause --id 5
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance resume --id 5
 ```
