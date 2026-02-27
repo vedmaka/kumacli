@@ -67,6 +67,115 @@ def _run(monkeypatch, args: list[str]):
     return cli.main(args)
 
 
+def _clear_env(monkeypatch):
+    for key in (
+        "KUMACLI_HOST",
+        "KUMACLI_USERNAME",
+        "KUMACLI_PASSWORD",
+        "KUMACLI_TOKEN",
+        "KUMACLI_TIMEOUT",
+        "KUMACLI_INSECURE",
+        "KUMA_URL",
+        "KUMA_USERNAME",
+        "KUMA_PASSWORD",
+        "KUMA_TOKEN",
+        "KUMA_TIMEOUT",
+        "KUMA_INSECURE",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
+def test_dotenv_connection_defaults(monkeypatch, tmp_path):
+    _clear_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "KUMACLI_HOST=http://dotenv-host\nKUMACLI_USERNAME=dotenv-user\nKUMACLI_PASSWORD=dotenv-pass\n",
+        encoding="utf-8",
+    )
+
+    code = _run(monkeypatch, ["monitors", "list", "--json"])
+    assert code == 0
+    api = FakeApi.instances[0]
+    assert api.url == "http://dotenv-host"
+    assert api.login_calls[0] == {"username": "dotenv-user", "password": "dotenv-pass", "token": ""}
+
+
+def test_cli_params_override_dotenv(monkeypatch, tmp_path):
+    _clear_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "KUMACLI_HOST=http://dotenv-host\nKUMACLI_USERNAME=dotenv-user\nKUMACLI_PASSWORD=dotenv-pass\n",
+        encoding="utf-8",
+    )
+
+    code = _run(
+        monkeypatch,
+        [
+            "--host",
+            "http://flag-host",
+            "--username",
+            "flag-user",
+            "--password",
+            "flag-pass",
+            "monitors",
+            "list",
+            "--json",
+        ],
+    )
+    assert code == 0
+    api = FakeApi.instances[0]
+    assert api.url == "http://flag-host"
+    assert api.login_calls[0] == {"username": "flag-user", "password": "flag-pass", "token": ""}
+
+
+def test_dotenv_token_timeout_insecure(monkeypatch, tmp_path):
+    _clear_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "KUMACLI_HOST=http://dotenv-host\nKUMACLI_TOKEN=dotenv-token\nKUMACLI_TIMEOUT=33\nKUMACLI_INSECURE=true\n",
+        encoding="utf-8",
+    )
+
+    code = _run(monkeypatch, ["monitors", "list", "--json"])
+    assert code == 0
+    api = FakeApi.instances[0]
+    assert api.url == "http://dotenv-host"
+    assert api.timeout == 33.0
+    assert api.ssl_verify is False
+    assert api.login_calls[0] == {"token_login": "dotenv-token"}
+
+
+def test_cli_overrides_dotenv_token_timeout_insecure(monkeypatch, tmp_path):
+    _clear_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "KUMACLI_HOST=http://dotenv-host\nKUMACLI_TOKEN=dotenv-token\nKUMACLI_TIMEOUT=44\nKUMACLI_INSECURE=true\n",
+        encoding="utf-8",
+    )
+
+    code = _run(
+        monkeypatch,
+        [
+            "--host",
+            "http://flag-host",
+            "--token",
+            "flag-token",
+            "--timeout",
+            "7",
+            "--no-insecure",
+            "monitors",
+            "list",
+            "--json",
+        ],
+    )
+    assert code == 0
+    api = FakeApi.instances[0]
+    assert api.url == "http://flag-host"
+    assert api.timeout == 7.0
+    assert api.ssl_verify is True
+    assert api.login_calls[0] == {"token_login": "flag-token"}
+
+
 def test_monitors_list_json(monkeypatch, capsys):
     code = _run(monkeypatch, ["--url", "http://kuma", "--token", "t", "monitors", "list", "--json"])
     out = capsys.readouterr().out

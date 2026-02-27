@@ -9,6 +9,7 @@ import sys
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 # Silence known upstream warning in uptime-kuma-api docstring parsing.
@@ -31,19 +32,85 @@ class ConnectionConfig:
     insecure: bool
 
 
+def _load_dotenv(path: str | Path = ".env") -> dict[str, str]:
+    """Load simple KEY=VALUE pairs from .env file."""
+    dotenv_path = Path(path)
+    if not dotenv_path.is_file():
+        return {}
+
+    loaded: dict[str, str] = {}
+    for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        loaded[key] = value
+    return loaded
+
+
+def _env_value(dotenv: dict[str, str], *keys: str) -> str | None:
+    for key in keys:
+        runtime_value = os.getenv(key)
+        if runtime_value:
+            return runtime_value
+        dotenv_value = dotenv.get(key)
+        if dotenv_value:
+            return dotenv_value
+    return None
+
+
+def _parse_bool(value: str) -> bool | None:
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
+    dotenv = _load_dotenv()
     parser = argparse.ArgumentParser(
         prog="kumacli",
         description="CLI interface for Uptime Kuma",
     )
-    parser.add_argument("--url", default=os.getenv("KUMA_URL"), help="Uptime Kuma base URL")
-    parser.add_argument("--username", default=os.getenv("KUMA_USERNAME"), help="Uptime Kuma username")
-    parser.add_argument("--password", default=os.getenv("KUMA_PASSWORD"), help="Uptime Kuma password")
-    parser.add_argument("--token", default=os.getenv("KUMA_TOKEN"), help="Uptime Kuma auth token")
-    parser.add_argument("--timeout", default=10.0, type=float, help="API timeout in seconds")
+    parser.add_argument(
+        "--url",
+        "--host",
+        dest="url",
+        default=_env_value(dotenv, "KUMACLI_HOST", "KUMA_URL"),
+        help="Uptime Kuma base URL",
+    )
+    parser.add_argument(
+        "--username",
+        default=_env_value(dotenv, "KUMACLI_USERNAME", "KUMA_USERNAME"),
+        help="Uptime Kuma username",
+    )
+    parser.add_argument(
+        "--password",
+        default=_env_value(dotenv, "KUMACLI_PASSWORD", "KUMA_PASSWORD"),
+        help="Uptime Kuma password",
+    )
+    parser.add_argument(
+        "--token",
+        default=_env_value(dotenv, "KUMACLI_TOKEN", "KUMA_TOKEN"),
+        help="Uptime Kuma auth token",
+    )
+    parser.add_argument("--timeout", default=None, type=float, help="API timeout in seconds")
     parser.add_argument(
         "--insecure",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help="Disable TLS certificate verification",
     )
 
@@ -83,7 +150,32 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     delete_parser.add_argument("--id", required=True, type=int, help="Maintenance ID")
     delete_parser.add_argument("--json", action="store_true", help="Output JSON")
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+
+    if args.timeout is None:
+        timeout_env = _env_value(dotenv, "KUMACLI_TIMEOUT", "KUMA_TIMEOUT")
+        if timeout_env is not None:
+            try:
+                args.timeout = float(timeout_env)
+            except ValueError:
+                parser.error(f"Invalid timeout value '{timeout_env}' in KUMACLI_TIMEOUT/KUMA_TIMEOUT")
+        else:
+            args.timeout = 10.0
+
+    if args.insecure is None:
+        insecure_env = _env_value(dotenv, "KUMACLI_INSECURE", "KUMA_INSECURE")
+        if insecure_env is not None:
+            parsed = _parse_bool(insecure_env)
+            if parsed is None:
+                parser.error(
+                    f"Invalid insecure value '{insecure_env}' in KUMACLI_INSECURE/KUMA_INSECURE "
+                    "(use true/false)"
+                )
+            args.insecure = parsed
+        else:
+            args.insecure = False
+
+    return args
 
 
 def _add_maintenance_payload_args(parser: argparse.ArgumentParser, *, include_title: bool) -> None:
@@ -240,7 +332,7 @@ def _build_payload(args: argparse.Namespace) -> dict[str, Any]:
 
 def _to_connection_config(args: argparse.Namespace) -> ConnectionConfig:
     if not args.url:
-        raise CliError("Missing --url or KUMA_URL")
+        raise CliError("Missing --url/--host or KUMACLI_HOST/KUMA_URL")
     return ConnectionConfig(
         url=args.url,
         username=args.username,

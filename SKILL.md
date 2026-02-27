@@ -18,12 +18,18 @@ uv run kumacli --help
 
 ## Auth
 
-Set `--url` or `KUMA_URL`.
+Set host via `--url`/`--host` or env `KUMACLI_HOST` (`KUMA_URL` fallback).
+
+`.env` in current dir auto-loaded. Params override env.
 
 Auth modes:
 - username/password: `--username` + `--password`
 - username/password + 2FA: add `--token <TOTP>`
 - token-only: `--token <login session token>` (uses Kuma `loginByToken`)
+
+Other connection params:
+- timeout: `--timeout` or `KUMACLI_TIMEOUT`/`KUMA_TIMEOUT`
+- TLS verify: `--insecure` / `--no-insecure` or `KUMACLI_INSECURE`/`KUMA_INSECURE`
 
 Important:
 - token-only expects Kuma login session token

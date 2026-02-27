@@ -16,11 +16,14 @@ uv sync --all-groups
 
 ## Auth
 
-Pass flags or env vars:
-- `--url` or `KUMA_URL`
-- token-only auth: `--token` or `KUMA_TOKEN` (login session token for `loginByToken`)
-- user/pass auth: `--username` + `--password` or `KUMA_USERNAME` + `KUMA_PASSWORD`
+Pass flags or env vars (`.env` in current dir auto-loaded):
+- `--url`/`--host` or `KUMACLI_HOST` (`KUMA_URL` still supported)
+- token-only auth: `--token` or `KUMACLI_TOKEN`/`KUMA_TOKEN` (login session token for `loginByToken`)
+- user/pass auth: `--username` + `--password` or `KUMACLI_USERNAME` + `KUMACLI_PASSWORD` (`KUMA_*` supported)
+- timeout: `--timeout` or `KUMACLI_TIMEOUT`/`KUMA_TIMEOUT`
+- TLS verify toggle: `--insecure`/`--no-insecure` or `KUMACLI_INSECURE`/`KUMA_INSECURE` (`true|false|1|0|yes|no|on|off`)
 - 2FA auth: pass `--token` together with `--username` and `--password` (TOTP code)
+- CLI params always override env values
 
 ## Usage
 
