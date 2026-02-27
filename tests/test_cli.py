@@ -21,12 +21,8 @@ class FakeApi:
         self.monitor_links = []
         FakeApi.instances.append(self)
 
-    def login(self, username=None, password=None, token=""):
-        self.login_calls.append({"username": username, "password": password, "token": token})
-        return {"token": "ok"}
-
-    def login_by_token(self, token: str):
-        self.login_calls.append({"token_login": token})
+    def login(self, username=None, password=None):
+        self.login_calls.append({"username": username, "password": password})
         return {}
 
     def disconnect(self):
@@ -72,13 +68,11 @@ def _clear_env(monkeypatch):
         "KUMACLI_HOST",
         "KUMACLI_USERNAME",
         "KUMACLI_PASSWORD",
-        "KUMACLI_TOKEN",
         "KUMACLI_TIMEOUT",
         "KUMACLI_INSECURE",
         "KUMA_URL",
         "KUMA_USERNAME",
         "KUMA_PASSWORD",
-        "KUMA_TOKEN",
         "KUMA_TIMEOUT",
         "KUMA_INSECURE",
     ):
@@ -97,7 +91,7 @@ def test_dotenv_connection_defaults(monkeypatch, tmp_path):
     assert code == 0
     api = FakeApi.instances[0]
     assert api.url == "http://dotenv-host"
-    assert api.login_calls[0] == {"username": "dotenv-user", "password": "dotenv-pass", "token": ""}
+    assert api.login_calls[0] == {"username": "dotenv-user", "password": "dotenv-pass"}
 
 
 def test_cli_params_override_dotenv(monkeypatch, tmp_path):
@@ -125,14 +119,15 @@ def test_cli_params_override_dotenv(monkeypatch, tmp_path):
     assert code == 0
     api = FakeApi.instances[0]
     assert api.url == "http://flag-host"
-    assert api.login_calls[0] == {"username": "flag-user", "password": "flag-pass", "token": ""}
+    assert api.login_calls[0] == {"username": "flag-user", "password": "flag-pass"}
 
 
-def test_dotenv_token_timeout_insecure(monkeypatch, tmp_path):
+def test_dotenv_timeout_insecure(monkeypatch, tmp_path):
     _clear_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env").write_text(
-        "KUMACLI_HOST=http://dotenv-host\nKUMACLI_TOKEN=dotenv-token\nKUMACLI_TIMEOUT=33\nKUMACLI_INSECURE=true\n",
+        "KUMACLI_HOST=http://dotenv-host\nKUMACLI_USERNAME=dotenv-user\nKUMACLI_PASSWORD=dotenv-pass\n"
+        "KUMACLI_TIMEOUT=33\nKUMACLI_INSECURE=true\n",
         encoding="utf-8",
     )
 
@@ -142,14 +137,15 @@ def test_dotenv_token_timeout_insecure(monkeypatch, tmp_path):
     assert api.url == "http://dotenv-host"
     assert api.timeout == 33.0
     assert api.ssl_verify is False
-    assert api.login_calls[0] == {"token_login": "dotenv-token"}
+    assert api.login_calls[0] == {"username": "dotenv-user", "password": "dotenv-pass"}
 
 
-def test_cli_overrides_dotenv_token_timeout_insecure(monkeypatch, tmp_path):
+def test_cli_overrides_dotenv_timeout_insecure(monkeypatch, tmp_path):
     _clear_env(monkeypatch)
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env").write_text(
-        "KUMACLI_HOST=http://dotenv-host\nKUMACLI_TOKEN=dotenv-token\nKUMACLI_TIMEOUT=44\nKUMACLI_INSECURE=true\n",
+        "KUMACLI_HOST=http://dotenv-host\nKUMACLI_USERNAME=dotenv-user\nKUMACLI_PASSWORD=dotenv-pass\n"
+        "KUMACLI_TIMEOUT=44\nKUMACLI_INSECURE=true\n",
         encoding="utf-8",
     )
 
@@ -158,8 +154,10 @@ def test_cli_overrides_dotenv_token_timeout_insecure(monkeypatch, tmp_path):
         [
             "--host",
             "http://flag-host",
-            "--token",
-            "flag-token",
+            "--username",
+            "flag-user",
+            "--password",
+            "flag-pass",
             "--timeout",
             "7",
             "--no-insecure",
@@ -173,11 +171,14 @@ def test_cli_overrides_dotenv_token_timeout_insecure(monkeypatch, tmp_path):
     assert api.url == "http://flag-host"
     assert api.timeout == 7.0
     assert api.ssl_verify is True
-    assert api.login_calls[0] == {"token_login": "flag-token"}
+    assert api.login_calls[0] == {"username": "flag-user", "password": "flag-pass"}
 
 
 def test_monitors_list_json(monkeypatch, capsys):
-    code = _run(monkeypatch, ["--url", "http://kuma", "--token", "t", "monitors", "list", "--json"])
+    code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "monitors", "list", "--json"],
+    )
     out = capsys.readouterr().out
     assert code == 0
     assert '"name": "api"' in out
@@ -191,8 +192,10 @@ def test_maintenance_create(monkeypatch):
         [
             "--url",
             "http://kuma",
-            "--token",
-            "t",
+            "--username",
+            "admin",
+            "--password",
+            "secret",
             "maintenance",
             "create",
             "--title",
@@ -214,8 +217,10 @@ def test_maintenance_update_with_monitors(monkeypatch):
         [
             "--url",
             "http://kuma",
-            "--token",
-            "t",
+            "--username",
+            "admin",
+            "--password",
+            "secret",
             "maintenance",
             "update",
             "--id",
@@ -234,12 +239,15 @@ def test_maintenance_update_with_monitors(monkeypatch):
 
 
 def test_maintenance_delete(monkeypatch):
-    code = _run(monkeypatch, ["--url", "http://kuma", "--token", "t", "maintenance", "delete", "--id", "5"])
+    code = _run(
+        monkeypatch,
+        ["--url", "http://kuma", "--username", "admin", "--password", "secret", "maintenance", "delete", "--id", "5"],
+    )
     assert code == 0
     assert FakeApi.instances[0].deleted_id == 5
 
 
-def test_login_with_username_password_and_2fa_token(monkeypatch):
+def test_login_with_username_password(monkeypatch):
     code = _run(
         monkeypatch,
         [
@@ -249,19 +257,20 @@ def test_login_with_username_password_and_2fa_token(monkeypatch):
             "admin",
             "--password",
             "secret",
-            "--token",
-            "123456",
             "monitors",
             "list",
             "--json",
         ],
     )
     assert code == 0
-    assert FakeApi.instances[0].login_calls[0] == {
-        "username": "admin",
-        "password": "secret",
-        "token": "123456",
-    }
+    assert FakeApi.instances[0].login_calls[0] == {"username": "admin", "password": "secret"}
+
+
+def test_errors_without_username_password(monkeypatch, capsys):
+    code = _run(monkeypatch, ["--url", "http://kuma", "monitors", "list", "--json"])
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "Missing --username/--password" in err
 
 
 def test_errors_on_unknown_monitor(monkeypatch, capsys):
@@ -270,8 +279,10 @@ def test_errors_on_unknown_monitor(monkeypatch, capsys):
         [
             "--url",
             "http://kuma",
-            "--token",
-            "t",
+            "--username",
+            "admin",
+            "--password",
+            "secret",
             "maintenance",
             "create",
             "--title",

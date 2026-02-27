@@ -22,18 +22,15 @@ Set host via `--url`/`--host` or env `KUMACLI_HOST` (`KUMA_URL` fallback).
 
 `.env` in current dir auto-loaded. Params override env.
 
-Auth modes:
-- username/password: `--username` + `--password`
-- username/password + 2FA: add `--token <TOTP>`
-- token-only: `--token <login session token>` (uses Kuma `loginByToken`)
+Auth mode:
+- username/password only: `--username` + `--password`
 
 Other connection params:
 - timeout: `--timeout` or `KUMACLI_TIMEOUT`/`KUMA_TIMEOUT`
 - TLS verify: `--insecure` / `--no-insecure` or `KUMACLI_INSECURE`/`KUMA_INSECURE`
 
 Important:
-- token-only expects Kuma login session token
-- token-only is not an API key mode
+- session token/API key auth not supported
 
 ## Core workflow
 
@@ -87,4 +84,3 @@ uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --passwor
 ## Troubleshooting
 
 - `Timed out while waiting for event Event.AUTO_LOGIN`: auth missing/invalid
-- if token-only fails, switch to username/password or refresh Kuma session token

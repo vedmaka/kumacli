@@ -27,7 +27,6 @@ class ConnectionConfig:
     url: str
     username: str | None
     password: str | None
-    token: str | None
     timeout: float
     insecure: bool
 
@@ -100,11 +99,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--password",
         default=_env_value(dotenv, "KUMACLI_PASSWORD", "KUMA_PASSWORD"),
         help="Uptime Kuma password",
-    )
-    parser.add_argument(
-        "--token",
-        default=_env_value(dotenv, "KUMACLI_TOKEN", "KUMA_TOKEN"),
-        help="Uptime Kuma auth token",
     )
     parser.add_argument("--timeout", default=None, type=float, help="API timeout in seconds")
     parser.add_argument(
@@ -333,11 +327,15 @@ def _build_payload(args: argparse.Namespace) -> dict[str, Any]:
 def _to_connection_config(args: argparse.Namespace) -> ConnectionConfig:
     if not args.url:
         raise CliError("Missing --url/--host or KUMACLI_HOST/KUMA_URL")
+    if not args.username or not args.password:
+        raise CliError(
+            "Missing --username/--password or "
+            "KUMACLI_USERNAME/KUMA_USERNAME + KUMACLI_PASSWORD/KUMA_PASSWORD"
+        )
     return ConnectionConfig(
         url=args.url,
         username=args.username,
         password=args.password,
-        token=args.token,
         timeout=args.timeout,
         insecure=args.insecure,
     )
@@ -346,26 +344,10 @@ def _to_connection_config(args: argparse.Namespace) -> ConnectionConfig:
 def _connect(args: argparse.Namespace) -> UptimeKumaApi:
     cfg = _to_connection_config(args)
     api = UptimeKumaApi(cfg.url, timeout=cfg.timeout, ssl_verify=not cfg.insecure)
-
-    if cfg.username and cfg.password:
-        api.login(username=cfg.username, password=cfg.password, token=cfg.token or "")
-        return api
-
-    if cfg.token:
-        try:
-            api.login_by_token(cfg.token)
-        except Exception as exc:
-            raise CliError(
-                "Token auth failed. --token expects a login session token, not API key; "
-                "or use --username/--password"
-            ) from exc
-        return api
-
     try:
-        # Works when Uptime Kuma auth is disabled.
-        api.login()
+        api.login(username=cfg.username, password=cfg.password)
     except Exception as exc:
-        raise CliError("Use --username/--password or --token") from exc
+        raise CliError("Username/password auth failed") from exc
     return api
 
 

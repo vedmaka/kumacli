@@ -18,11 +18,9 @@ uv sync --all-groups
 
 Pass flags or env vars (`.env` in current dir auto-loaded):
 - `--url`/`--host` or `KUMACLI_HOST` (`KUMA_URL` still supported)
-- token-only auth: `--token` or `KUMACLI_TOKEN`/`KUMA_TOKEN` (login session token for `loginByToken`)
-- user/pass auth: `--username` + `--password` or `KUMACLI_USERNAME` + `KUMACLI_PASSWORD` (`KUMA_*` supported)
+- username/password auth: `--username` + `--password` or `KUMACLI_USERNAME` + `KUMACLI_PASSWORD` (`KUMA_*` supported)
 - timeout: `--timeout` or `KUMACLI_TIMEOUT`/`KUMA_TIMEOUT`
 - TLS verify toggle: `--insecure`/`--no-insecure` or `KUMACLI_INSECURE`/`KUMA_INSECURE` (`true|false|1|0|yes|no|on|off`)
-- 2FA auth: pass `--token` together with `--username` and `--password` (TOTP code)
 - CLI params always override env values
 
 ## Usage
@@ -30,13 +28,13 @@ Pass flags or env vars (`.env` in current dir auto-loaded):
 List monitors:
 
 ```bash
-uv run kumacli --url http://localhost:3001 --token "$KUMA_TOKEN" monitors list
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors list
 ```
 
 Create maintenance for monitors:
 
 ```bash
-uv run kumacli --url http://localhost:3001 --token "$KUMA_TOKEN" maintenance create \
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance create \
   --title "Deploy window" \
   --strategy single \
   --date-start "2026-03-01 22:00" \
@@ -47,7 +45,7 @@ uv run kumacli --url http://localhost:3001 --token "$KUMA_TOKEN" maintenance cre
 Update maintenance:
 
 ```bash
-uv run kumacli --url http://localhost:3001 --token "$KUMA_TOKEN" maintenance update \
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance update \
   --id 5 \
   --title "Updated title" \
   --monitor-id 2,3
@@ -56,5 +54,5 @@ uv run kumacli --url http://localhost:3001 --token "$KUMA_TOKEN" maintenance upd
 Delete maintenance:
 
 ```bash
-uv run kumacli --url http://localhost:3001 --token "$KUMA_TOKEN" maintenance delete --id 5
+uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance delete --id 5
 ```
