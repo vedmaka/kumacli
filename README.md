@@ -1,50 +1,117 @@
 # kumacli
 
-CLI for Uptime Kuma.
+CLI for Uptime Kuma automation from terminal.
 
-Features:
-- list monitors with current status
-- get monitor details
-- add/update/delete monitors
-- pause/resume monitors
-- create maintenance for selected monitors
-- update maintenance fields and linked monitors
-- delete maintenance
-- list/get/pause/resume maintenance
+## Highlights
 
-## Install
+- monitor commands: `list`, `get`, `add`, `update`, `delete`, `pause`, `resume`
+- maintenance commands: `list`, `get`, `create`, `update`, `delete`, `pause`, `resume`
+- JSON output mode for scripts: `--json`
+- `.env` auto-load with CLI-overrides-env behavior
+
+## Table of Contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Command Reference](#command-reference)
+- [Examples](#examples)
+- [Development](#development)
+- [Troubleshooting](#troubleshooting)
+
+## Requirements
+
+- Python `>=3.13`
+- `uv`
+- reachable Uptime Kuma instance
+- Uptime Kuma username/password
+
+## Installation
 
 ```bash
 uv sync --all-groups
 ```
 
-## Auth
-
-Pass flags or env vars (`.env` in current dir auto-loaded):
-- `--url`/`--host` or `KUMACLI_HOST` (`KUMA_URL` still supported)
-- username/password auth: `--username` + `--password` or `KUMACLI_USERNAME` + `KUMACLI_PASSWORD` (`KUMA_*` supported)
-- timeout: `--timeout` or `KUMACLI_TIMEOUT`/`KUMA_TIMEOUT`
-- TLS verify toggle: `--insecure`/`--no-insecure` or `KUMACLI_INSECURE`/`KUMA_INSECURE` (`true|false|1|0|yes|no|on|off`)
-- CLI params always override env values
-
-## Usage
-
-List monitors:
+## Quick Start
 
 ```bash
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors list
+export KUMACLI_HOST="http://localhost:3001"
+export KUMACLI_USERNAME="admin"
+export KUMACLI_PASSWORD="secret"
+
+uv run kumacli monitors list --json
 ```
 
-Get monitor:
+## Configuration
+
+`.env` in current dir is auto-loaded.
+
+| Flag | Env | Required | Notes |
+|---|---|---|---|
+| `--url` / `--host` | `KUMACLI_HOST` (`KUMA_URL` fallback) | yes | Uptime Kuma base URL |
+| `--username` | `KUMACLI_USERNAME` (`KUMA_USERNAME`) | yes | username/password auth only |
+| `--password` | `KUMACLI_PASSWORD` (`KUMA_PASSWORD`) | yes | username/password auth only |
+| `--timeout` | `KUMACLI_TIMEOUT` (`KUMA_TIMEOUT`) | no | default `10` seconds |
+| `--insecure` / `--no-insecure` | `KUMACLI_INSECURE` (`KUMA_INSECURE`) | no | bool: `true/false/1/0/yes/no/on/off` |
+
+Rules:
+- CLI flags override env values
+- API key/session token auth not supported
+
+## Command Reference
+
+Global help:
 
 ```bash
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors get --id 1 --json
+uv run kumacli --help
+uv run kumacli monitors --help
+uv run kumacli maintenance --help
 ```
+
+Monitor commands:
+
+```text
+kumacli monitors list [--json]
+kumacli monitors get --id <id> [--json]
+kumacli monitors add --name <name> --type <type> [--field key=value ...] [--data-json '{...}'] [--data-file payload.json] [--json]
+kumacli monitors update --id <id> [--name <name>] [--type <type>] [--field key=value ...] [--data-json '{...}'] [--data-file payload.json] [--json]
+kumacli monitors delete --id <id> [--json]
+kumacli monitors pause --id <id> [--json]
+kumacli monitors resume --id <id> [--json]
+```
+
+Maintenance commands:
+
+```text
+kumacli maintenance list [--json]
+kumacli maintenance get --id <id> [--json]
+kumacli maintenance create --title <title> --monitor-id <id[,id]> [options] [--json]
+kumacli maintenance update --id <id> [options] [--monitor-id <id[,id]> ...] [--json]
+kumacli maintenance delete --id <id> [--json]
+kumacli maintenance pause --id <id> [--json]
+kumacli maintenance resume --id <id> [--json]
+```
+
+Monitor payload options (`add`/`update`):
+- `--field key=value` repeatable
+- `--data-json '{"k":"v"}'`
+- `--data-file payload.json`
+- merge order: `--data-file` -> `--data-json` -> `--field` -> explicit `--name/--type`
+
+Maintenance options:
+- strategy: `manual|single|recurring-interval|recurring-weekday|recurring-day-of-month|cron`
+- date range: `--date-start`, `--date-end`
+- time range: `--time-start`, `--time-end`
+- recurrence: `--interval-day`, `--weekday`, `--day-of-month`, `--cron`, `--duration-minutes`, `--timezone`
+- state: `--active` / `--inactive`
+
+## Examples
 
 Add monitor:
 
 ```bash
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors add \
+uv run kumacli monitors add \
   --name "Main API" \
   --type http \
   --field "url=https://example.com/health" \
@@ -54,24 +121,13 @@ uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --passwor
 Update monitor:
 
 ```bash
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors update \
-  --id 1 \
-  --name "Main API v2" \
-  --field "maxretries=5"
+uv run kumacli monitors update --id 1 --field "maxretries=5"
 ```
 
-Delete/pause/resume monitor:
+Create maintenance:
 
 ```bash
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors pause --id 1
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors resume --id 1
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" monitors delete --id 1
-```
-
-Create maintenance for monitors:
-
-```bash
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance create \
+uv run kumacli maintenance create \
   --title "Deploy window" \
   --strategy single \
   --date-start "2026-03-01 22:00" \
@@ -79,26 +135,16 @@ uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --passwor
   --monitor-id 1 --monitor-id 2
 ```
 
-Update maintenance:
+## Development
 
 ```bash
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance update \
-  --id 5 \
-  --title "Updated title" \
-  --monitor-id 2,3
+uv sync --all-groups
+uv run pytest -q
 ```
 
-Delete maintenance:
+## Troubleshooting
 
-```bash
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance delete --id 5
-```
-
-List/get/pause/resume maintenance:
-
-```bash
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance list --json
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance get --id 5 --json
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance pause --id 5
-uv run kumacli --url http://localhost:3001 --username "$KUMA_USERNAME" --password "$KUMA_PASSWORD" maintenance resume --id 5
-```
+- `error: Missing --url/--host...`: set URL via flag or env
+- `error: Missing --username/--password...`: pass creds via flags/env
+- `error: Unknown monitor IDs: ...`: run `monitors list`, retry with valid IDs
+- `Timed out while waiting for event Event.AUTO_LOGIN`: invalid auth or unreachable Kuma
