@@ -29,9 +29,21 @@ CLI for Uptime Kuma automation from terminal.
 
 ## Installation
 
+Published package: https://pypi.org/project/kumacli/
+
+Default run method (no install):
+
 ```bash
-uv sync --all-groups
+uvx kumacli --help
 ```
+
+Install from PyPI (optional):
+
+```bash
+pip install kumacli
+```
+
+`uv sync --all-groups` is for local development only.
 
 ## Quick Start
 
@@ -40,7 +52,7 @@ export KUMACLI_HOST="http://localhost:3001"
 export KUMACLI_USERNAME="admin"
 export KUMACLI_PASSWORD="secret"
 
-uv run kumacli monitors list --json
+uvx kumacli monitors list --json
 ```
 
 ## Configuration
@@ -64,9 +76,9 @@ Rules:
 Global help:
 
 ```bash
-uv run kumacli --help
-uv run kumacli monitors --help
-uv run kumacli maintenance --help
+uvx kumacli --help
+uvx kumacli monitors --help
+uvx kumacli maintenance --help
 ```
 
 Monitor commands:
@@ -111,7 +123,7 @@ Maintenance options:
 Add monitor:
 
 ```bash
-uv run kumacli monitors add \
+uvx kumacli monitors add \
   --name "Main API" \
   --type http \
   --field "url=https://example.com/health" \
@@ -121,13 +133,13 @@ uv run kumacli monitors add \
 Update monitor:
 
 ```bash
-uv run kumacli monitors update --id 1 --field "maxretries=5"
+uvx kumacli monitors update --id 1 --field "maxretries=5"
 ```
 
 Create maintenance:
 
 ```bash
-uv run kumacli maintenance create \
+uvx kumacli maintenance create \
   --title "Deploy window" \
   --strategy single \
   --date-start "2026-03-01 22:00" \
